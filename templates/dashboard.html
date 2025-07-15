@@ -352,4 +352,320 @@
             <div class="logo">Dashboard</div>
             <div class="header-info">
                 Internal Analytics Portal | 
-                Last Updated: <span class="
+                Last Updated: <span class="last-updated" id="lastUpdated">Loading...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="nav-tabs">
+        <div class="nav-tabs-content" id="tabsContainer">
+            <!-- Tabs will be populated by JavaScript -->
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="content" id="contentContainer">
+            <!-- Content will be populated by JavaScript -->
+        </div>
+    </div>
+
+    <div class="footer">
+        Your Internal Dashboard System - Built with Python & PostgreSQL
+    </div>
+
+    <script>
+        class Dashboard {
+            constructor() {
+                this.widgets = [];
+                this.tabs = {};
+                this.currentTab = 'Overview';
+                this.refreshInterval = null;
+                this.init();
+            }
+
+            async init() {
+                await this.loadTabs();
+                await this.loadWidgets();
+                this.startAutoRefresh();
+            }
+
+            async loadTabs() {
+                try {
+                    const response = await fetch('/api/tabs');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.tabs = data.tabs;
+                        this.renderTabs();
+                    }
+                } catch (error) {
+                    console.error('Error loading tabs:', error);
+                    // Fallback to Overview tab
+                    this.tabs = { 'Overview': [] };
+                    this.renderTabs();
+                }
+            }
+
+            async loadWidgets() {
+                try {
+                    const response = await fetch('/api/widgets');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.widgets = data.widgets;
+                        this.renderWidgets();
+                        this.updateLastUpdated();
+                    }
+                } catch (error) {
+                    console.error('Error loading widgets:', error);
+                    this.showError('Failed to load dashboard data');
+                }
+            }
+
+            renderTabs() {
+                const tabsContainer = document.getElementById('tabsContainer');
+                const tabNames = Object.keys(this.tabs);
+                
+                if (tabNames.length === 0) {
+                    tabNames.push('Overview');
+                }
+
+                tabsContainer.innerHTML = tabNames.map(tabName => 
+                    `<button class="tab ${tabName === this.currentTab ? 'active' : ''}" 
+                             onclick="dashboard.switchTab('${tabName}')">${tabName}</button>`
+                ).join('');
+            }
+
+            renderWidgets() {
+                const contentContainer = document.getElementById('contentContainer');
+                
+                // Group widgets by tab
+                const widgetsByTab = {};
+                
+                this.widgets.forEach(widget => {
+                    const tab = widget.tab_group || 'Overview';
+                    if (!widgetsByTab[tab]) {
+                        widgetsByTab[tab] = [];
+                    }
+                    widgetsByTab[tab].push(widget);
+                });
+
+                // Render tab sections
+                const tabSections = Object.keys(this.tabs).map(tabName => {
+                    const tabWidgets = widgetsByTab[tabName] || [];
+                    const isActive = tabName === this.currentTab;
+                    
+                    return `
+                        <div class="tab-section ${isActive ? 'active' : ''}" id="tab-${tabName}">
+                            ${tabWidgets.map(widget => this.renderWidget(widget)).join('')}
+                            ${tabWidgets.length === 0 ? this.renderEmptyTab(tabName) : ''}
+                        </div>
+                    `;
+                }).join('');
+
+                contentContainer.innerHTML = tabSections;
+            }
+
+            renderWidget(widget) {
+                const statusClass = widget.status === 'error' ? 'error' : 
+                                  widget.status === 'loading' ? 'loading' : '';
+                
+                const badgeClass = widget.status === 'error' ? 'error' : 
+                                  widget.status === 'loading' ? 'loading' : 'success';
+
+                const displayName = widget.display_name || widget.widget_name?.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                const description = widget.description || '';
+
+                let contentHtml = '';
+
+                if (widget.status === 'error') {
+                    contentHtml = `
+                        <div class="error-message">
+                            <strong>Error:</strong> ${widget.error_message || 'Unknown error occurred'}
+                        </div>
+                    `;
+                } else if (widget.output_data) {
+                    try {
+                        const data = typeof widget.output_data === 'string' ? 
+                                   JSON.parse(widget.output_data) : widget.output_data;
+                        
+                        if (data.data) {
+                            contentHtml = this.renderWidgetData(data.data);
+                        } else {
+                            contentHtml = `<div class="widget-data"><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+                        }
+                    } catch (e) {
+                        contentHtml = `<div class="widget-data"><pre>${widget.output_data}</pre></div>`;
+                    }
+                } else {
+                    contentHtml = '<div class="widget-content">No data available</div>';
+                }
+
+                return `
+                    <div class="widget ${statusClass}" id="widget-${widget.widget_name}">
+                        <div class="widget-header">
+                            <h3 class="widget-title">${displayName}</h3>
+                            <div>
+                                <span class="widget-badge ${badgeClass}">
+                                    ${widget.status === 'loading' ? '<div class="loading-spinner"></div>' : ''}
+                                    ${widget.status || 'active'}
+                                </span>
+                                <button class="refresh-button" onclick="dashboard.refreshWidget('${widget.widget_name}')">
+                                    Refresh
+                                </button>
+                            </div>
+                        </div>
+                        ${description ? `<div class="widget-content">${description}</div>` : ''}
+                        ${contentHtml}
+                        ${widget.last_updated ? `<div style="font-size: 12px; color: #9ca3af; margin-top: 12px;">
+                            Last updated: ${new Date(widget.last_updated).toLocaleString()}
+                        </div>` : ''}
+                    </div>
+                `;
+            }
+
+            renderWidgetData(data) {
+                if (typeof data === 'object' && data !== null) {
+                    // Check if data has numeric values that could be displayed as stats
+                    const numericKeys = Object.keys(data).filter(key => 
+                        typeof data[key] === 'number' || 
+                        (typeof data[key] === 'string' && data[key].match(/^\d+(\.\d+)?%?$/))
+                    );
+
+                    if (numericKeys.length >= 2) {
+                        const statsHtml = numericKeys.slice(0, 4).map(key => `
+                            <div class="stat-item">
+                                <span class="stat-value">${data[key]}</span>
+                                <div class="stat-label">${key.replace(/_/g, ' ')}</div>
+                            </div>
+                        `).join('');
+
+                        const remainingData = Object.keys(data)
+                            .filter(key => !numericKeys.slice(0, 4).includes(key))
+                            .reduce((obj, key) => {
+                                obj[key] = data[key];
+                                return obj;
+                            }, {});
+
+                        return `
+                            <div class="widget-stats">${statsHtml}</div>
+                            ${Object.keys(remainingData).length > 0 ? 
+                                `<div class="widget-data"><pre>${JSON.stringify(remainingData, null, 2)}</pre></div>` : ''}
+                        `;
+                    }
+                }
+
+                return `<div class="widget-data"><pre>${JSON.stringify(data, null, 2)}</pre></div>`;
+            }
+
+            renderEmptyTab(tabName) {
+                return `
+                    <div class="widget">
+                        <div class="widget-header">
+                            <h3 class="widget-title">No Widgets Available</h3>
+                        </div>
+                        <div class="widget-content">
+                            No widgets found for the ${tabName} tab. Add Python files to the widgets folder to see them here.
+                        </div>
+                    </div>
+                `;
+            }
+
+            switchTab(tabName) {
+                this.currentTab = tabName;
+                
+                // Update tab buttons
+                document.querySelectorAll('.tab').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                event.target.classList.add('active');
+
+                // Update tab sections
+                document.querySelectorAll('.tab-section').forEach(section => {
+                    section.classList.remove('active');
+                });
+                
+                const targetSection = document.getElementById(`tab-${tabName}`);
+                if (targetSection) {
+                    targetSection.classList.add('active');
+                }
+
+                // Scroll to top
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            async refreshWidget(widgetName) {
+                const button = event.target;
+                const originalText = button.textContent;
+                
+                button.disabled = true;
+                button.textContent = 'Refreshing...';
+
+                try {
+                    const response = await fetch(`/api/widgets/${widgetName}/refresh`);
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        // Reload all widgets to get updated data
+                        await this.loadWidgets();
+                    } else {
+                        console.error('Error refreshing widget:', data.message);
+                    }
+                } catch (error) {
+                    console.error('Error refreshing widget:', error);
+                } finally {
+                    button.disabled = false;
+                    button.textContent = originalText;
+                }
+            }
+
+            startAutoRefresh() {
+                // Refresh every minute
+                this.refreshInterval = setInterval(() => {
+                    this.loadWidgets();
+                }, 60000);
+            }
+
+            updateLastUpdated() {
+                const lastUpdatedElement = document.getElementById('lastUpdated');
+                if (lastUpdatedElement) {
+                    lastUpdatedElement.textContent = new Date().toLocaleString();
+                }
+            }
+
+            showError(message) {
+                const contentContainer = document.getElementById('contentContainer');
+                contentContainer.innerHTML = `
+                    <div class="widget error">
+                        <div class="widget-header">
+                            <h3 class="widget-title">Dashboard Error</h3>
+                            <span class="widget-badge error">Error</span>
+                        </div>
+                        <div class="error-message">${message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize dashboard when page loads
+        let dashboard;
+        document.addEventListener('DOMContentLoaded', () => {
+            dashboard = new Dashboard();
+        });
+
+        // Handle page visibility changes to pause/resume auto-refresh
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (dashboard && dashboard.refreshInterval) {
+                    clearInterval(dashboard.refreshInterval);
+                }
+            } else {
+                if (dashboard) {
+                    dashboard.startAutoRefresh();
+                    dashboard.loadWidgets(); // Refresh immediately when page becomes visible
+                }
+            }
+        });
+    </script>
+</body>
+</html>
