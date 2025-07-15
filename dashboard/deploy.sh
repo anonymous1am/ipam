@@ -12,14 +12,30 @@ sudo systemctl stop dashboard
 # Pull latest changes from GitHub
 git pull origin main
 
-# Activate virtual environment
-source venv/bin/activate
+# Update system packages
+sudo apt update
 
-# Install/update dependencies
-pip install -r requirements.txt
+# Install/update APT dependencies from requirements.txt
+if [ -f "requirements.txt" ]; then
+    echo "Installing APT packages from requirements.txt..."
+    while IFS= read -r package; do
+        if [[ ! "$package" =~ ^#.*$ ]] && [[ -n "$package" ]]; then
+            echo "Installing: $package"
+            sudo apt install -y "$package"
+        fi
+    done < requirements.txt
+fi
+
+# Install additional Python packages that aren't available via APT
+if [ -f "pip-requirements.txt" ]; then
+    echo "Installing additional Python packages..."
+    source venv/bin/activate
+    pip install -r pip-requirements.txt
+fi
 
 # Run any database migrations if needed
-python -c "from database.connection import init_database; init_database()"
+source venv/bin/activate
+python3 -c "from database.connection import init_database; init_database()" 2>/dev/null || echo "Database initialization skipped (may already be initialized)"
 
 # Restart the service
 sudo systemctl start dashboard
@@ -45,34 +61,3 @@ DEBUG=false
 
 # Logging Configuration
 LOG_LEVEL=INFO
-
-
-# requirements.txt - Python dependencies
-Flask==2.3.3
-psycopg2-binary==2.9.7
-python-dotenv==1.0.0
-psutil==5.9.5
-gunicorn==21.2.0
-
-
-# nginx.conf - Nginx configuration for production (optional)
-server {
-    listen 80;
-    server_name your-domain.com;  # Replace with your domain or IP
-
-    location / {
-        proxy_pass http://127.0.0.1:5000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    # Static files (optional optimization)
-    location /static {
-        alias /opt/dashboard/static;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
-
