@@ -1,0 +1,81 @@
+# docker-compose.yml - Alternative Docker deployment (optional)
+version: '3.8'
+services:
+  dashboard:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://dashboarduser:password@db:5432/dashboard
+    depends_on:
+      - db
+    volumes:
+      - ./widgets:/app/widgets
+      - ./config.py:/app/config.py
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: dashboard
+      POSTGRES_USER: dashboarduser
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+
+# Dockerfile - Docker container setup (optional)
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create widgets directory
+RUN mkdir -p widgets
+
+# Expose port
+EXPOSE 5000
+
+# Run application
+CMD ["python", "app.py"]
+
+
+# GitHub Actions workflow - .github/workflows/deploy.yml
+name: Deploy Dashboard
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        script: |
+          cd /opt/dashboard
+          bash deploy.sh
