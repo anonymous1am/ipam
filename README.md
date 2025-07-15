@@ -16,7 +16,7 @@ A modular Flask dashboard system that automatically discovers and executes Pytho
 
 ### Step 1: Clone Repository
 ```bash
-git clone https://github.com/yourusername/dashboard.git
+git clone https://github.com/anonymous1am/ipam.git
 cd dashboard
 ```
 
@@ -30,7 +30,7 @@ bash setup.sh
 #### A. Update GitHub Repository URL
 Edit `setup.sh` and replace:
 ```bash
-git clone https://github.com/yourusername/dashboard.git .
+git clone https://github.com/anonymous1am/ipam.git .
 ```
 With your actual GitHub repository URL.
 
