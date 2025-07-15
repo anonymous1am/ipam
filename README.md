@@ -21,3 +21,59 @@ Each Python Widget needs to have the following code included in order for it to 
 #}
 
 Uncomment the code after including it in the .py file for the widget.
+
+
+
+# README.md content for the repository
+# Dashboard Application
+
+A modular Flask dashboard system that automatically discovers and executes Python widgets.
+
+## Features
+
+- **Auto-discovery**: Automatically finds and loads Python widgets from the `widgets/` folder
+- **Caching**: Widgets run once every 24 hours, with 1-minute frontend refresh
+- **Professional UI**: Clean, responsive design with teal color scheme
+- **PostgreSQL Integration**: Shared database connection for all widgets
+- **Error Handling**: Displays widget errors with detailed messages
+- **Tab Organization**: Widgets can be organized into tabs
+- **Real-time Updates**: Automatic refresh and manual refresh options
+
+## Quick Start
+
+1. Clone the repository
+2. Run `bash setup.sh` on your Ubuntu server
+3. Update database credentials in `config.py`
+4. Add your Python widgets to the `widgets/` folder
+5. Access the dashboard at `http://your-server:5000`
+
+## Widget Development
+
+Create a Python file in the `widgets/` folder with this structure:
+
+```python
+def execute():
+    return {
+        "title": "My Widget",
+        "data": {"key": "value"},
+        "status": "success"
+    }
+
+WIDGET_CONFIG = {
+    "display_name": "My Widget",
+    "description": "Widget description",
+    "tab_group": "Overview"
+}
+```
+
+## Deployment
+
+- **Manual**: Run `bash deploy.sh` to pull updates from GitHub
+- **Automatic**: Use GitHub Actions or cron jobs for scheduled deployments
+- **Docker**: Use the provided docker-compose.yml for containerized deployment
+
+## Management
+
+- Service: `sudo systemctl {start|stop|restart|status} dashboard`
+- Logs: `sudo journalctl -u dashboard -f`
+- Backup: `bash backup.sh`
